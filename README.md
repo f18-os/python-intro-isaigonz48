@@ -1,4 +1,4 @@
-#Python lab assignment intro 
+# Python lab assignment intro 
 
 * Using wordCount.py appropriately will write all the words and how many times they are repeated in an input text file
 
