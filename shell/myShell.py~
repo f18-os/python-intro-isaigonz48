@@ -1,0 +1,21 @@
+import os, sys, time, re
+
+pid = os.getpid()
+
+os.write(1, ("Starting up shell\n"))
+
+rc = os.fork()
+
+if rc < 0:
+    os.write(2, ("Fork failed, returning %d\n" % rc).encode())
+    sys.exit()
+
+elif rc == 0:
+    os.write(1, ("%s : " % os.environ['PATH']))
+
+else:
+    os.write(1, ("What happen"))
+    
+    #childPidCode = os.wait()
+    time.sleep(2)
+    os.write(1, ("I am done waiting\n"))
