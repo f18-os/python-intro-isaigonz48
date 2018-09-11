@@ -65,7 +65,7 @@ while True:
                 pass
             
         os.write(2, ("Error try again\n").encode())
-        
+        sys.exit()
         
     else:    
         childPidCode = os.wait()
