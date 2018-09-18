@@ -1,3 +1,5 @@
+#!usr/bin/env python3
+
 import os, sys, time, re
 
 pid = os.getpid()
@@ -61,26 +63,31 @@ while True:
                 sys.exit()
             ######## New child supposed to write into pipe
             elif nc == 0:
-                os.set_inheritable(pipeFds[1],True)
-                os.set_inheritable(pipeFds[0],True)
+                #os.set_inheritable(pipeFds[1],True)
+                #os.set_inheritable(pipeFds[0],True)
                 os.close(1)
-                os.dup2(pipeFds[1], sys.stdout.fileno())
-                os.set_inheritable(1,True)
+                sys.stdout = os.fdopen(os.dup(pipeFds[1]), 'w')
+                #os.fdopen(fd)
+                fd = sys.stdout.fileno()
+                os.set_inheritable(fd,True)
                 userInput = sepCalls[0].encode()
-                os.close(pipeFds[0])
-                os.close(pipeFds[1])
+                os.close(3)
+                os.close(4)
             ####### Original child supposed to read from pipe
             else:
-                os.wait()
+                #childPid = os.wait()
                 #os.set_inheritable(pipeFds[0],True)
                 #os.set_inheritable(pipeFds[1],True)
                 os.close(0)
-                os.dup2(pipeFds[0],sys.stdin.fileno())
-                #fd = sys.stdin.fileno()
-                os.set_inheritable(0,True)
-                os.close(pipeFds[1])
-                os.close(pipeFds[0])
-                userInput = sepCalls[1].encode()
+                sys.stdin = os.fdopen(os.dup(pipeFds[0]), 'r')
+                #print (fd)
+                #os.fdopen(fd)
+                fd = sys.stdin.fileno()
+                os.set_inheritable(fd, True)
+                os.close(3)
+                os.close(4)
+                
+                userInput = sepCalls[1].encode()        
                 
         ####### Decodes userInput and removes last or first space char if there is one
         userInput = userInput.decode()
@@ -102,6 +109,7 @@ while True:
         ######################################### Output redirection
         ####### >>
         if extOut == 2:
+            ####### Must put what was already in file, back in
             with open(outFile, "r") as readFile:
                 curText = readFile.read()
             readFile.close()
