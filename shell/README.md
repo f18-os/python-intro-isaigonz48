@@ -6,6 +6,6 @@
 
 * Supports simple (one) output redirection and input redirection
 
-* Pipeline not supported, could not attach stdin and stdout to pipeline, but I think theory behind it is correct
+* Single pipeline is supported
 
 * To exit the shell, type "exit"
