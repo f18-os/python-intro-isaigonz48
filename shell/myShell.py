@@ -1,16 +1,24 @@
-#!usr/bin/env python3
+#! /usr/bin/env python3
 
 import os, sys, time, re
 
-pid = os.getpid()
 
 while True:
-    os.write(1, ("command prompt:").encode())
+    pid = os.getpid()
+
+    if ("PS1" in os.environ):
+        os.write(1,(os.environ["PS1"]).encode())
+    else:
+        os.write(1,("prompt:").encode())
 
     userInput = os.read(0, 1024)
+    
     ###### Removes \n character at end of input
-    userInput = userInput[:-1]
+    if userInput.decode()[-1] == '\n':
+        userInput = userInput[:-1]
 
+    if len(userInput) < 1:
+        continue
     if userInput.decode() == "exit":
         sys.exit()
 
@@ -23,32 +31,34 @@ while True:
     for arg in checkSymbols:
         if arg == ">":
             extOut = 1
-            temp = re.split(" > ", userInput.decode())
+            temp = re.split(">", userInput.decode())
             userInput = temp[0].encode()
             outFile = temp[1]
             break
         elif arg == ">>":
             extOut = 2
-            temp = re.split(" >> ", userInput.decode())
+            temp = re.split(">>", userInput.decode())
             userInput = temp[0].encode()
             outFile = temp[1]
             break
 
         elif arg == "<":
             extIn = 1
-            temp = re.split(" < ", userInput.decode())
+            temp = re.split("<", userInput.decode())
             userInput = temp[0].encode()
             inFile = temp[1]
             break
         
         elif arg == "|":
             pipeUsed = 1
-            sepCalls = re.split(" \| ", userInput.decode())
+            sepCalls = re.split("\|", userInput.decode())
             break
+        
     if pipeUsed:
-        pipeFds = os.pipe()
-        os.set_inheritable(pipeFds[0], True)
-        os.set_inheritable(pipeFds[1], True)
+        pipeR,pipeW = os.pipe()
+        for f in (pipeR, pipeW):
+            os.set_inheritable(f, True)
+
     rc = os.fork()
     
     if rc < 0:
@@ -60,56 +70,55 @@ while True:
             nc = os.fork()
             if nc < 0:
                 os.write(2, ("Fork failed, returning %d\n" % nc).encode())
-                sys.exit()
-            ######## New child supposed to write into pipe
+                sys.exit(1)
+            ######## New child writes into pipe
             elif nc == 0:
-                #os.set_inheritable(pipeFds[1],True)
-                #os.set_inheritable(pipeFds[0],True)
                 os.close(1)
-                sys.stdout = os.fdopen(os.dup(pipeFds[1]), 'w')
-                #os.fdopen(fd)
-                fd = sys.stdout.fileno()
-                os.set_inheritable(fd,True)
+                os.dup(pipeW)
+                os.set_inheritable(1,True)
+                os.close(pipeR)
+                os.close(pipeW)
+                
                 userInput = sepCalls[0].encode()
-                os.close(3)
-                os.close(4)
-            ####### Original child supposed to read from pipe
+
+            ####### Original child reads from pipe
             else:
-                #childPid = os.wait()
-                #os.set_inheritable(pipeFds[0],True)
-                #os.set_inheritable(pipeFds[1],True)
                 os.close(0)
-                sys.stdin = os.fdopen(os.dup(pipeFds[0]), 'r')
-                #print (fd)
-                #os.fdopen(fd)
-                fd = sys.stdin.fileno()
-                os.set_inheritable(fd, True)
-                os.close(3)
-                os.close(4)
+                os.dup(pipeR)
+                os.set_inheritable(0,True)
+                os.close(pipeR)
+                os.close(pipeW)
                 
-                userInput = sepCalls[1].encode()        
-                
+                userInput = sepCalls[1].encode()
+
         ####### Decodes userInput and removes last or first space char if there is one
         userInput = userInput.decode()
         if userInput[-1] == ' ':
             userInput = userInput[:-1]
+        if len(userInput) < 1:
+            sys.exit()
         if userInput[0] == ' ':
-            userInput = userInput[1:-1]
+            userInput = userInput[1:]
         args = re.split(" ", userInput)
 
         ############################################ Input redirection
         if extIn == 1:
+            if inFile[0] == ' ':
+                inFile = inFile[1:]
             if inFile[-1] == ' ':
                 inFile = inFile[:-1]
             os.close(0)
             sys.stdin = open(inFile, "r")
             fd = sys.stdin.fileno()
             os.set_inheritable(fd,True)
-
         ######################################### Output redirection
         ####### >>
         if extOut == 2:
             ####### Must put what was already in file, back in
+            if outFile[0] == ' ':
+                outFile = outFile[1:]
+            if outFile[-1] == ' ':
+                outFile = outFile[:-1]
             with open(outFile, "r") as readFile:
                 curText = readFile.read()
             readFile.close()
@@ -121,6 +130,10 @@ while True:
             os.write(1, (curText).encode())
         ####### >
         elif extOut == 1:
+            if outFile[0] == ' ':
+                outFile = outFile[1:]
+            if outFile[-1] == ' ':
+                outFile = outFile[:-1]
             os.close(1)
             sys.stdout = open(outFile, "w")
             fd = sys.stdout.fileno()
@@ -135,10 +148,10 @@ while True:
                 pass
             
         os.write(2, ("Error try again\n").encode())
-        sys.exit()
+        sys.exit(1)
         
     else:    
-        childPidCode = os.wait()
         if pipeUsed:
-            os.close(pipeFds[0])
-            os.close(pipeFds[1])
+            os.close(pipeR)
+            os.close(pipeW)
+        childPidCode = os.wait()
