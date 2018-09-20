@@ -2,32 +2,45 @@
 
 import os, sys, time, re
 
+pid = os.getpid()
 
 while True:
-    pid = os.getpid()
 
     if ("PS1" in os.environ):
         os.write(1,(os.environ["PS1"]).encode())
     else:
-        os.write(1,("prompt:").encode())
+        os.write(1,("$ ").encode())
 
-    userInput = os.read(0, 1024)
-    
-    ###### Removes \n character at end of input
-    if userInput.decode()[-1] == '\n':
-        userInput = userInput[:-1]
-
-    if len(userInput) < 1:
-        continue
-    if userInput.decode() == "exit":
-        sys.exit()
+    userInput = os.read(0, 2048)
 
     ######## Flags
     extOut = 0
     extIn = 0
     pipeUsed = 0
+    waitFinish = 1
+    
+    ###### Removes \n character at end of input and checks if it was not just blank
+    ###### If userInput does not have \n, it is EOF
+    if len(userInput) < 1:
+        sys.exit()
+    if userInput.decode()[-1] == '\n':
+        userInput = userInput[:-1]
+    if len(userInput) < 1:
+        continue
+    if userInput.decode() == "exit":
+        sys.exit()
+
     ######## Checks for use of >> > < or |
     checkSymbols = re.split(" ", userInput.decode())
+
+    if checkSymbols[-1] == '&':
+        waitFinish = 0
+        userInput = userInput[:-1]
+        checkSymbols = re.split(" ", userInput.decode())
+
+    if checkSymbols[0] == 'cd':
+        print ("cd is not supported, sorry bud")
+        continue
     for arg in checkSymbols:
         if arg == ">":
             extOut = 1
@@ -56,8 +69,8 @@ while True:
         
     if pipeUsed:
         pipeR,pipeW = os.pipe()
-        for f in (pipeR, pipeW):
-            os.set_inheritable(f, True)
+        os.set_inheritable(pipeR, True)
+        os.set_inheritable(pipeW, True)
 
     rc = os.fork()
     
@@ -66,6 +79,7 @@ while True:
         sys.exit()
 
     elif rc == 0:
+        ##################### Pipe stuff
         if pipeUsed:
             nc = os.fork()
             if nc < 0:
@@ -139,7 +153,8 @@ while True:
             fd = sys.stdout.fileno()
             os.set_inheritable(fd,True)
 
-        ####################################### Executing
+        ####################################### Executing        
+                
         for dir in re.split(":", os.environ['PATH']):
             program = "%s/%s" % (dir, args[0])
             try:
@@ -147,11 +162,12 @@ while True:
             except FileNotFoundError:
                 pass
             
-        os.write(2, ("Error try again\n").encode())
+        os.write(2, ("Command not found\n").encode())
         sys.exit(1)
         
-    else:    
+    else:
         if pipeUsed:
             os.close(pipeR)
             os.close(pipeW)
-        childPidCode = os.wait()
+        if waitFinish:
+            os.wait()
